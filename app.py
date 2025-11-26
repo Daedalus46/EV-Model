@@ -1,64 +1,68 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import json
 import os
-import numpy as np
 
-# ------------------- SAFETY CHECK -------------------
+# ------------------- Page Config -------------------
+st.set_page_config(
+    page_title="EV Range Predictor",
+    page_icon="⚡️",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
+
+# ------------------- Title & Header -------------------
+st.markdown("""
+    <h1 style='text-align: center; color: #1E90FF;'>Electric Vehicle Range Predictor</h1>
+    <h3 style='text-align: center; color: #666666;'>Real-time range prediction using machine learning</h3>
+    <hr style='border: 2px solid #1E90FF; border-radius: 5px;'>
+""", unsafe_allow_html=True)
+
+# ------------------- Safety Check -------------------
 if not os.path.exists("best_ev_range_model.pkl"):
-    st.error("Model file not found! Upload best_ev_range_model.pkl to GitHub and reboot.")
+    st.error("Model file missing. Please upload best_ev_range_model.pkl and reboot.")
     st.stop()
 
-if not os.path.exists("features_used.json"):
-    st.error("features_used.json not found! Upload it and reboot.")
-    st.stop()
-
-# ------------------- LOAD MODEL SAFELY -------------------
+# ------------------- Load Model & Data -------------------
 @st.cache_resource
 def load_model():
     return joblib.load("best_ev_range_model.pkl")
 
-try:
-    model = load_model()
-    with open("features_used.json", "r") as f:
-        features = json.load(f)
-except Exception as e:
-    st.error(f"Error loading model. This usually happens due to version mismatch. "
-             f"We're fixing it automatically...")
-    st.stop()
-
-# ------------------- APP UI -------------------
-st.set_page_config(page_title="EV Range Predictor", layout="centered")
-st.title("Electric Vehicle Range Predictor")
-st.markdown("**CT-264 Assignment #01** – Group: Usman, Maaz, Ameem (CR-23038, CR-23041, CR-23013)")
-
-# Load data for dropdown options
 @st.cache_data
 def load_data():
     return pd.read_csv("cleaned_data.csv")
 
+model = load_model()
 df = load_data()
 
-col1, col2 = st.columns(2)
-with col1:
+# ------------------- Sidebar Inputs -------------------
+with st.sidebar:
+    st.header("Vehicle Details")
+    
     county = st.selectbox("County", options=sorted(df["County"].dropna().unique()))
-    city = st.selectbox("City", options=sorted(df[df["County"] == county]["City"].dropna().unique()))
+    city_options = df[df["County"] == county]["City"].dropna().unique()
+    city = st.selectbox("City", options=sorted(city_options))
+    
     make = st.selectbox("Make", options=sorted(df["Make"].dropna().unique()))
-    model_name = st.selectbox("Model", options=sorted(df[df["Make"] == make]["Model"].dropna().unique()))
-
-with col2:
+    model_options = df[df["Make"] == make]["Model"].dropna().unique()
+    model_name = st.selectbox("Model", options=sorted(model_options))
+    
     model_year = st.slider("Model Year", 2000, 2026, 2023)
+    vehicle_age = 2025 - model_year
+    
     ev_type = st.selectbox("EV Type", options=["BEV", "PHEV"])
     cafv = st.selectbox("CAFV Eligibility", options=["Eligible", "Not Eligible", "Unknown"])
     utility = st.selectbox("Electric Utility", options=sorted(df["Electric_Utility"].dropna().unique()))
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        has_range = st.checkbox("Known Range", value=True)
+    with col_b:
+        has_msrp = st.checkbox("Has MSRP", value=False)
 
-vehicle_age = 2025 - model_year
-has_range = st.checkbox("Has known electric range", value=True)
-has_msrp = st.checkbox("Has MSRP listed", value=False)
-
-if st.button("Predict Electric Range", type="primary"):
-    input_df = pd.DataFrame([{
+# ------------------- Prediction -------------------
+if st.button("Predict Electric Range", type="primary", use_container_width=True):
+    input_data = pd.DataFrame([{
         "County": county,
         "City": city,
         "Make": make,
@@ -71,12 +75,28 @@ if st.button("Predict Electric Range", type="primary"):
         "Has_Range_Data": int(has_range),
         "Has_MSRP": int(has_msrp)
     }])
-
-    pred = model.predict(input_df)[0]
-    st.success(f"**Predicted Electric Range: {pred:.1f} miles**")
     
-    if pred > 250:
+    prediction = model.predict(input_data)[0]
+    
+    st.markdown(f"""
+        <div style='text-align: center; padding: 30px; background-color: #f0f8ff; border-radius: 15px;'>
+            <h1 style='color: #1E90FF; margin:0;'>⚡️ {prediction:.1f} miles</h1>
+            <p style='color: #666666; font-size: 1.2em;'>Predicted Electric Range</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if prediction > 250:
+        st.success("Long-range Battery Electric Vehicle (BEV)")
         st.balloons()
-        st.info("Long-range Battery Electric Vehicle (BEV)")
-    elif pred < 50:
-        st.warning("Plug-in Hybrid (PHEV) with short electric range")
+    elif prediction > 80:
+        st.info("Mid-to-long range electric vehicle")
+    else:
+        st.warning("Plug-in Hybrid (PHEV) or short-range model")
+
+# ------------------- Footer -------------------
+st.markdown("<br><hr>", unsafe_allow_html=True)
+st.markdown("""
+    <p style='text-align: center; color: #888888;'>
+        Powered by Random Forest • R² = 0.9957 • MAE = 1.71 miles • Washington State EV Dataset
+    </p>
+""", unsafe_allow_html=True)
