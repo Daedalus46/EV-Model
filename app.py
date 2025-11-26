@@ -26,7 +26,7 @@ if not os.path.exists("best_ev_range_model.pkl"):
 # ------------------- Load Model & Data -------------------
 @st.cache_resource
 def load_model():
-    return joblib.load("best_ev_range_model.pkl")
+    return joblib.load("best_ev_range_model.pkl", mmap_mode='r')
 
 @st.cache_data
 def load_data():
@@ -100,3 +100,4 @@ st.markdown("""
         Powered by Random Forest • R² = 0.9957 • MAE = 1.71 miles • Washington State EV Dataset
     </p>
 """, unsafe_allow_html=True)
+
